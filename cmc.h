@@ -168,6 +168,19 @@ std::string_view to_string(VALUE_CATEGORY vc)
 
 #define log_value_category(...) do { auto vc = value_category(__VA_ARGS__); std::println("{}", to_string( vc ) ); } while(0)  
 
+template <class T> struct is_prvalue     : std::true_type  {};
+template <class T> struct is_prvalue<T&> : std::false_type {};
+template <class T> struct is_prvalue<T&&>: std::false_type {};
+
+template <class T> struct is_lvalue      : std::false_type {};
+template <class T> struct is_lvalue<T&>  : std::true_type  {};
+template <class T> struct is_lvalue<T&&> : std::false_type {};
+
+template <class T> struct is_xvalue		 : std::false_type {};
+template <class T> struct is_xvalue<T&>  : std::false_type {};
+template <class T> struct is_xvalue<T&&> : std::true_type  {};
+
+
 // + + + + + + + + + + + + + + + + + + + + +
 // debug_alloc<T>
 //
@@ -204,27 +217,41 @@ bool operator!=(const debug_alloc<T>& a1, const debug_alloc<T>& a2) { return fal
 // String
 // Just for testing 
 
-constexpr int DTOR = 0b10000;
-constexpr int COPY = 0b01000;
-constexpr int MOVE = 0b00100;
-constexpr int COPYA = 0b00010;
-constexpr int MOVEA = 0b00001;
+constexpr int DTOR =  0b100000;
+constexpr int COPY =  0b010000;
+constexpr int MOVE =  0b001000;
+constexpr int COPYA = 0b000100;
+constexpr int MOVEA = 0b000010;
+constexpr int DATA =  0b000001;
 
 template<int FLAG = 0>
-struct LOGString : public std::string
+class LOGString : public std::string
 {
 	using std::string::basic_string;
 
-	LOGString(const LOGString& s) : std::string(s)
+private:
+	void log(std::string_view log_string)
+	{
+		std::print("{}", log_string);
+
+		if constexpr (FLAG & DATA)
+			std::print(" [\"{}\"]", static_cast<std::string&>(*this));
+
+		std::println("");
+	}
+
+public:
+	LOGString(const LOGString& s) : std::string{ s }
 	{
 		if constexpr (FLAG & COPY)
-			std::println("copy ctor");
+			log("copy ctor");
+
 	}
 
 	LOGString(LOGString&& s) noexcept : std::string(std::move(s))
 	{
 		if constexpr (FLAG & MOVE)
-			std::println("move ctor");
+			log("move ctor");
 	}
 
 	LOGString& operator=(const LOGString& s)
@@ -232,7 +259,7 @@ struct LOGString : public std::string
 		std::string::operator=(s);
 
 		if constexpr (FLAG & COPYA)
-			std::println("copy =");
+			log("copy =");
 
 		return *this;
 	}
@@ -242,23 +269,25 @@ struct LOGString : public std::string
 		std::string::operator=(std::move(s));
 
 		if constexpr (FLAG & MOVEA)
-			std::println("move =");
+			log("move =");
 		return *this;
 	}
 	~LOGString()
 	{
 
 		if constexpr (FLAG & DTOR)
-			std::println("~String");
+		{
+			log("~String");
+		}
 	}
 
 };
 
 //using String = LOGString<MOVE | DTOR>;
 //using String = LOGString<MOVE | COPY | DTOR>;
+//using String = LOGString<MOVE | COPY | MOVEA | COPYA | DTOR>;
 //using String = LOGString<0>;
-
-using String = LOGString<DTOR>;
+//using String = LOGString<DTOR>;
 
 // + + + + + + + + + + + + + + + + + + + + +
 // chronometry() & stop_watch
